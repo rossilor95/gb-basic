@@ -1,6 +1,6 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
-    Eof,
+    EndOfFile,
 
     Comma,
     LeftParen,

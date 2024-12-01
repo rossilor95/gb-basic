@@ -1,12 +1,13 @@
 use crate::token::Token;
+use core::panic;
 use std::{char, str::Chars};
 
 pub struct Lexer<'a> {
     chars: Chars<'a>,
 }
 
-pub fn str_to_keyword(word: &str) -> Option<Token> {
-    match word {
+pub fn str_to_keyword(value: &str) -> Option<Token> {
+    match value {
         "CLEAR" => Some(Token::Clear),
         "END" => Some(Token::End),
         "GOSUB" => Some(Token::Gosub),
@@ -32,23 +33,67 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn is_at_end(&self) -> bool {
-        self.chars.clone().next().is_none()
-    }
-
     fn peek(&self) -> Option<char> {
         self.chars.clone().next()
     }
 
-    fn lex_number(&mut self, c: Option<char>) -> Token {
-        // TODO
-        Token::Number(0)
+    fn lex_keyword(&mut self, c: char) -> Token {
+        let mut value = c.to_string();
+
+        while self.peek().is_some_and(|c1| c1.is_alphabetic()) {
+            value.push(self.chars.next().unwrap());
+        }
+
+        if let Some(token) = str_to_keyword(&value) {
+            token
+        } else {
+            panic!("Error 186: Misspelled statement type keyword");
+        }
     }
 
-    fn lex_symbol(&mut self, c: Option<char>) -> Token {
+    fn lex_number(&mut self, c: char) -> Token {
+        let mut value = c.to_digit(10).unwrap() as i32;
+
+        loop {
+            match self.peek() {
+                Some(c1) if c1.is_digit(10) => {
+                    value = value * 10 + c.to_digit(10).unwrap() as i32;
+                    self.chars.next();
+                }
+                Some(c1) if c1.is_whitespace() => {
+                    self.chars.next();
+                }
+                _ => break,
+            }
+        }
+
+        Token::Number(value as i16)
+    }
+
+    fn lex_string(&mut self, c: char) -> Token {
+        let mut value = c.to_string();
+
+        loop {
+            match self.peek() {
+                Some('"') => {
+                    self.chars.next();
+                    break;
+                }
+                Some(c) => {
+                    value.push(c);
+                    self.chars.next();
+                }
+                None => panic!("Error 62: Missing close quote in PRINT string"),
+            }
+        }
+
+        Token::String("".to_string())
+    }
+
+    fn lex_symbol(&mut self, c: char) -> Token {
         match c {
-            Some('=') => Token::Equal,
-            Some('>') => match self.peek() {
+            '=' => Token::Equal,
+            '>' => match self.peek() {
                 Some('=') => {
                     self.chars.next();
                     Token::GreaterEqual
@@ -59,7 +104,7 @@ impl<'a> Lexer<'a> {
                 }
                 _ => Token::Greater,
             },
-            Some('<') => match self.peek() {
+            '<' => match self.peek() {
                 Some('=') => {
                     self.chars.next();
                     Token::LessEqual
@@ -70,36 +115,24 @@ impl<'a> Lexer<'a> {
                 }
                 _ => Token::Less,
             },
-            Some('-') => Token::Minus,
-            Some('+') => Token::Plus,
-            Some('/') => Token::Slash,
-            Some('*') => Token::Star,
-            Some('(') => Token::LeftParen,
-            Some(')') => Token::RightParen,
-            Some('"') => Token::Quote,
-            Some(',') => Token::Comma,
-            Some(';') => Token::Semicolon,
-            _ => panic!(
-                "Unexpected character {:?} at position {:?}",
-                c,
-                self.chars.as_str()
-            ),
+            '-' => Token::Minus,
+            '+' => Token::Plus,
+            '/' => Token::Slash,
+            '*' => Token::Star,
+            '(' => Token::LeftParen,
+            ')' => Token::RightParen,
+            '"' => Token::Quote,
+            ',' => Token::Comma,
+            ';' => Token::Semicolon,
+            _ => panic!("Unable to analyze symbol {:?}", c),
         }
     }
 
-    fn lex_word(&mut self, c: Option<char>) -> Token {
-        // TODO
-        Token::Variable('c')
-    }
-
-    fn next_token(&mut self) -> Token {
-        let c = self.chars.next();
-        match c {
-            Some('0'..='9') => self.lex_number(c),
-            Some(' ' | '\t') => self.next_token(),
-            Some('A'..='Z' | 'a'..='z') => self.lex_word(c),
-            None => Token::Eof,
-            _ => self.lex_symbol(c),
+    fn lex_var_or_keyword(&mut self, c: char) -> Token {
+        match self.peek() {
+            Some(c1) if c1.is_whitespace() => Token::Variable(c),
+            Some(c1) if c1.is_alphabetic() => self.lex_keyword(c),
+            _ => panic!("Unable to analyze word starting with {:?}", c),
         }
     }
 }
@@ -108,10 +141,13 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.is_at_end() {
-            None
-        } else {
-            Some(self.next_token())
+        match self.chars.next() {
+            Some(c) if c.is_whitespace() => self.next(),
+            Some(c) if c.is_digit(10) => Some(self.lex_number(c)),
+            Some(c) if c.is_alphabetic() => Some(self.lex_var_or_keyword(c)),
+            Some(c) if c == '"' => Some(self.lex_string(c)),
+            Some(c) => Some(self.lex_symbol(c)),
+            None => None,
         }
     }
 }
