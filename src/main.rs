@@ -1,12 +1,15 @@
 mod lexer;
 mod token;
 
-use std::io;
+use std::io::{self, Write};
 
 fn main() {
     println!("READY.");
 
     loop {
+        print!(":");
+        io::stdout().flush().unwrap();
+
         let mut input = String::new();
 
         io::stdin()
